@@ -1,3 +1,4 @@
+import { ui } from "./i18n";
 import { sameModel } from "./ollama";
 import { ItemView, MarkdownRenderer, MarkdownView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type LocalVaultAgentPlugin from "./main";
@@ -82,11 +83,11 @@ export class AgentView extends ItemView {
 		copyChat.addEventListener("click", () => {
 			const md = conversationToMarkdown(this.conversation.messages);
 			if (!md.trim()) {
-				new Notice("Nothing to copy yet.");
+				new Notice(ui("Nothing to copy yet.", "복사할 대화가 없습니다."));
 				return;
 			}
 			void navigator.clipboard.writeText(md);
-			new Notice("Conversation copied as markdown.");
+			new Notice(ui("Conversation copied as markdown.", "대화를 Markdown으로 복사했습니다."));
 		});
 		const refresh = header.createEl("button", { cls: "clickable-icon lva-icon-btn", attr: { "aria-label": t("view.refreshModels") } });
 		setIcon(refresh, "refresh-cw");
@@ -230,7 +231,7 @@ export class AgentView extends ItemView {
 			const m = messages[i];
 			if (m.role === "user") {
 				if (m.content === AUTO_CONTINUE_TEXT || m.content.startsWith(GROUNDING_PREFIX) || /^Your reply was empty/.test(m.content)) {
-					this.messagesEl.createDiv({ cls: "lva-msg lva-note", text: "(auto-continued)" });
+					this.messagesEl.createDiv({ cls: "lva-msg lva-note", text: ui("(auto-continued)", "(자동으로 계속 진행됨)") });
 				} else {
 					const user = this.messagesEl.createDiv({ cls: "lva-msg lva-user" });
 					user.createDiv({ cls: "lva-bubble", text: m.content.split("\n\n(The user attached")[0] });
@@ -357,11 +358,11 @@ export class AgentView extends ItemView {
 				this.resetConversation();
 				break;
 			case "gists":
-				new Notice("Regenerating gists in the background…");
+				new Notice(ui("Regenerating gists in the background…", "백그라운드에서 노트 한 줄 요약을 다시 만드는 중…"));
 				void this.plugin.gists.syncAll(true);
 				break;
 			case "index":
-				new Notice("Rebuilding the semantic index…");
+				new Notice(ui("Rebuilding the semantic index…", "의미 검색 색인을 다시 만드는 중…"));
 				void this.plugin.index.syncAll(true);
 				break;
 			case "help": {
@@ -484,9 +485,18 @@ export class AgentView extends ItemView {
 		const started = Date.now();
 		let calls = 0;
 		const progress = () => this.updateStatus(t("view.status.working", { calls, secs: Math.round((Date.now() - started) / 1000) }));
-		const ticker = window.setInterval(progress, 1000);
+		let waitingForDna = this.plugin.usesBundledDnaServer;
+		const ticker = window.setInterval(() => { if (!waitingForDna) progress(); }, 1000);
 
 		try {
+			const signal = this.abort.signal;
+			if (waitingForDna) {
+				this.updateStatus(ui("Connecting to the DNA server…", "로컬 모델 서버 연결 중…"));
+				await this.plugin.ensureDnaServer();
+				waitingForDna = false;
+				void this.populateModels();
+				if (signal.aborted) return;
+			}
 			await this.plugin.agent.run(
 				this.conversation,
 				message,
@@ -827,11 +837,11 @@ export class AgentView extends ItemView {
 	insertAtCursor(text: string): void {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view) {
-			new Notice("Open a note in the editor first.");
+			new Notice(ui("Open a note in the editor first.", "편집기에서 노트를 먼저 여세요."));
 			return;
 		}
 		view.editor.replaceSelection(text);
-		new Notice("Inserted into the note.");
+		new Notice(ui("Inserted into the note.", "노트에 삽입했습니다."));
 	}
 }
 
@@ -861,7 +871,7 @@ class TurnRenderer {
 		if (!this.thinkingEl) {
 			this.thinkingEl = this.root.createEl("details", { cls: "lva-thinking" });
 			this.thinkingEl.open = true;
-			this.thinkingEl.createEl("summary", { text: "Thinking…" });
+			this.thinkingEl.createEl("summary", { text: ui("Thinking…", "추론 중…") });
 			this.thinkingBody = this.thinkingEl.createDiv({ cls: "lva-thinking-body" });
 			this.root.insertBefore(this.thinkingEl, this.contentEl);
 		}
@@ -884,7 +894,7 @@ class TurnRenderer {
 		}
 		if (this.thinkingEl) {
 			this.thinkingEl.open = false;
-			this.thinkingEl.querySelector("summary")!.setText("Thinking (click to show)");
+			this.thinkingEl.querySelector("summary")!.setText(ui("Thinking (click to show)", "추론 과정 (클릭하여 보기)"));
 		}
 		this.content = message.content;
 		this.contentEl.removeClass("lva-streaming");
@@ -895,7 +905,7 @@ class TurnRenderer {
 			setIcon(copy, "copy");
 			copy.addEventListener("click", () => {
 				void navigator.clipboard.writeText(this.content);
-				new Notice("Copied.");
+				new Notice(ui("Copied.", "복사했습니다."));
 			});
 			const insert = actions.createEl("button", { cls: "clickable-icon lva-icon-btn", attr: { "aria-label": t("view.insert") } });
 			setIcon(insert, "file-input");
@@ -943,7 +953,7 @@ class TurnRenderer {
 		card.removeClass("lva-tool-running");
 		card.addClass(ok ? "lva-tool-ok" : "lva-tool-error");
 		const args = card.querySelector(".lva-tool-args");
-		if (args) args.setText(ok ? describeResult(call, result) : "failed");
+		if (args) args.setText(ok ? describeResult(call, result) : ui("failed", "실패"));
 		const body = card.querySelector(".lva-tool-body") as HTMLElement;
 		body.createEl("pre", {
 			cls: "lva-tool-pre lva-tool-result",
@@ -980,8 +990,39 @@ function short(v: unknown, max = 48): string {
 }
 
 /** "Searched “magnet problems”" instead of `search_notes {"query":…}`. */
+const toolLabelsKo: Record<string, string> = {
+	"search_notes": "문서 검색",
+	"search_passages": "관련 문단 검색",
+	"grep_vault": "전체 문서 키워드 검색",
+	"read_note": "문서 읽기",
+	"read_section": "문서 섹션 읽기",
+	"find_in_note": "문서 내 검색",
+	"list_sections": "문서 섹션 목록",
+	"list_notes": "문서 목록 조회",
+	"list_files": "파일 목록 조회",
+	"read_file": "첨부 파일 읽기",
+	"create_note": "문서 생성",
+	"edit_note": "문서 수정",
+	"edit_notes": "여러 문서 수정",
+	"append_to_note": "문서 내용 추가",
+	"replace_section": "문서 섹션 교체",
+	"replace_note": "문서 내용 교체",
+	"move_note": "문서 이동",
+	"delete_file": "파일 삭제",
+	"get_active_note": "현재 열린 문서 조회",
+	"vault_overview": "Vault 구조 조회",
+	"list_lectures": "강의 목록 조회",
+	"lecture_transcript": "강의 자막 읽기",
+	"read_image": "이미지 읽기"
+};
+
 function describeCall(call: ToolCall): string {
 	const a = call.function.arguments ?? {};
+	const label = ui("", toolLabelsKo[call.function.name] ?? "");
+	if (label) {
+		const detail = short(a.path ?? a.query ?? a.pattern ?? a.folder);
+		return detail ? `${label} · ${detail}` : label;
+	}
 	switch (call.function.name) {
 		case "search_notes":
 			return `Searched notes for “${short(a.query)}”`;

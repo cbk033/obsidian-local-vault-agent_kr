@@ -1,3 +1,5 @@
+import { ko } from "./i18n-ko";
+
 /**
  * UI strings. English is complete; another language is a partial dictionary of the same keys
  * (missing keys fall back to English). The locale follows Obsidian's language setting. Model
@@ -6,6 +8,8 @@
  */
 
 const en = {
+	"set.ui.name": "Interface language",
+	"set.ui.desc": "Reload the plugin to apply the change.",
 	// Settings: headings
 	"set.h.server": "Model server",
 	"set.h.search": "Search",
@@ -262,10 +266,14 @@ export type I18nKey = keyof typeof en;
 type Dictionary = Partial<Record<I18nKey, string>>;
 
 /** Other languages: add a partial dictionary here; missing keys fall back to English. */
-const LOCALES: Record<string, Dictionary> = { en };
+const LOCALES: Record<string, Dictionary> = { en, ko };
 
 let current: Dictionary = en;
 let currentLocale = "en";
+
+export function ui(english: string, korean: string): string {
+	return currentLocale === "ko" ? korean : english;
+}
 
 /** Picks the dictionary for a locale like "de" or "pt-BR" (falls back to the base language, then English). */
 export function setLocale(locale: string | null | undefined): string {

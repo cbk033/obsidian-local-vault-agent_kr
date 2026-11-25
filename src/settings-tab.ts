@@ -1,6 +1,6 @@
 import { sameModel } from "./ollama";
 import { App, Notice, PluginSettingTab, Setting, normalizePath, requireApiVersion, type SettingDefinitionItem } from "obsidian";
-import { hasKey, t, type I18nKey } from "./i18n";
+import { hasKey, t, ui, type I18nKey } from "./i18n";
 import type LocalVaultAgentPlugin from "./main";
 import { TuneModal } from "./prompt-modals";
 import { conventionsTemplate } from "./prompts";
@@ -94,7 +94,13 @@ export class LocalVaultAgentSettingTab extends PluginSettingTab {
 			{
 				heading: t("set.h.server"),
 				rows: [
-					this.row("set.provider", (st) =>
+					this.row("set.ui", (st) => st.addDropdown((d) => d.addOptions({ ko: "한국어", en: "English" })
+							.setValue(s.interfaceLanguage).onChange(async (v) => {
+								s.interfaceLanguage = v === "en" ? "en" : "ko";
+								await save();
+							}))),
+					this.row("set.provider", (st) => {
+						st.settingEl.addClass("lva-path-setting");
 						st.addDropdown((d) =>
 							d
 								.addOptions({ ollama: t("set.provider.ollama"), openai: t("set.provider.openai") })
@@ -105,8 +111,20 @@ export class LocalVaultAgentSettingTab extends PluginSettingTab {
 									void p.refreshVision();
 									this.refresh();
 								}),
-						),
+						);
+						if (!isOllama()) st.addText((box) => {
+							box.inputEl.addClass("lva-path-input");
+							box.setPlaceholder(ui("Engine path (default if empty)", "엔진 경로 직접 지정 (미지정 시 기본 경로)"))
+								.setValue(s.dnaEnginePath).onChange(async (value) => {
+									s.dnaEnginePath = value.trim();
+									await save();
+								});
+							box.inputEl.setAttribute("aria-label", ui("Engine path (default if empty)", "엔진 경로 직접 지정 (미지정 시 기본 경로)"));
+							box.inputEl.title = ui("Empty uses engine/llama-server.exe in the plugin folder.", "비워 두면 플러그인 폴더의 engine/llama-server.exe를 사용합니다.");
+						});
+					},
 					{ aliases: ["LM Studio", "llama.cpp", "Jan", "vLLM", "OpenAI"] }),
+
 					this.row(
 						"set.url",
 						(st) =>
@@ -165,7 +183,23 @@ export class LocalVaultAgentSettingTab extends PluginSettingTab {
 							);
 						},
 					},
+
 					this.row("set.model", (st) => {
+						st.settingEl.addClass("lva-path-setting");
+						if (!isOllama()) st.addText((box) => {
+							box.inputEl.addClass("lva-path-input");
+							box.setPlaceholder(ui("Model path (default if empty)", "모델 경로 직접 지정 (미지정 시 기본 경로)"))
+								.setValue(s.dnaModelPath).onChange(async (value) => {
+									s.dnaModelPath = value.trim();
+									if (s.dnaModelPath) {
+										s.model = s.dnaModelPath.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "") || s.model;
+									}
+									await save();
+								});
+							box.inputEl.setAttribute("aria-label", ui("Model path (default if empty)", "모델 경로 직접 지정 (미지정 시 기본 경로)"));
+							box.inputEl.title = ui("Empty uses models/DNA3.0-9B.Q4_K_M.gguf in the plugin folder.", "비워 두면 플러그인 폴더의 models/DNA3.0-9B.Q4_K_M.gguf를 사용합니다.");
+						});
+
 						st.addDropdown(async (d) => {
 							d.addOption(s.model, s.model);
 							d.setValue(s.model);

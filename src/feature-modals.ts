@@ -1,3 +1,4 @@
+import { ui } from "./i18n";
 import { App, Modal, Setting } from "obsidian";
 import type { ConceptProperty, ConceptSuggestion } from "./concepts";
 import { computeDiff } from "./diff";
@@ -24,13 +25,13 @@ export class QuizModal extends Modal {
 	onOpen(): void {
 		const { contentEl, titleEl, modalEl } = this;
 		modalEl.addClass("lva-options-modal");
-		titleEl.setText("Quiz me");
+		titleEl.setText(ui("Quiz me", "퀴즈"));
 		contentEl.createEl("p", {
 			cls: "lva-modal-help",
-			text: "Questions are written from your notes on the topic, asked one at a time in the chat and graded against the passage they came from. Missed ones go to a review note, after you approve the diff. Type stop to end early.",
+			text: ui("Questions are written from your notes on the topic, asked one at a time in the chat and graded against the passage they came from. Missed ones go to a review note, after you approve the diff. Type stop to end early.", "관련 노트를 바탕으로 한 문제씩 출제하고 원문 문단과 비교해 채점합니다. 틀린 문항은 변경 승인 후 복습 노트에 저장됩니다. 중간에 끝내려면 stop을 입력하세요."),
 		});
 		new Setting(contentEl)
-			.setName("Topic or course")
+			.setName(ui("Topic or course", "주제 또는 과목"))
 			.setDesc(this.courses.length ? `Lecture Companion courses: ${this.courses.join(", ")}` : "A course folder, a topic, or words from note names.")
 			.addText((t) => {
 				t.setPlaceholder(this.courses[0] ?? "Machine Learning").onChange((v) => (this.topic = v));
@@ -40,20 +41,20 @@ export class QuizModal extends Modal {
 				window.setTimeout(() => t.inputEl.focus(), 0);
 			});
 		new Setting(contentEl)
-			.setName("Since")
-			.setDesc("A date (2026-10-01), or words: last week, 2 weeks ago, monday, Oct 3. Empty for all.")
+			.setName(ui("Since", "시작 날짜"))
+			.setDesc(ui("A date (2026-10-01), or words: last week, 2 weeks ago, monday, Oct 3. Empty for all.", "날짜를 입력하세요. 예: 2026-10-01. 비워 두면 전체 기간을 사용합니다."))
 			.addText((t) => t.setPlaceholder("last week").onChange((v) => (this.since = v)));
-		new Setting(contentEl).setName("Questions").addSlider((s) =>
+		new Setting(contentEl).setName(ui("Questions", "문항 수")).addSlider((s) =>
 			s
 				.setLimits(3, 15, 1)
 				.setValue(this.count)
 				.onChange((v) => (this.count = v)),
 		);
 		new Setting(contentEl)
-			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.finish(false)))
+			.addButton((b) => b.setButtonText(ui("Cancel", "취소")).onClick(() => this.finish(false)))
 			.addButton((b) =>
 				b
-					.setButtonText("Start the quiz")
+					.setButtonText(ui("Start the quiz", "퀴즈 시작"))
 					.setCta()
 					.onClick(() => this.finish(true)),
 			);
@@ -93,7 +94,7 @@ export class ConceptModal extends Modal {
 	onOpen(): void {
 		const { contentEl, titleEl, modalEl } = this;
 		modalEl.addClass("lva-options-modal");
-		titleEl.setText("Concept links");
+		titleEl.setText(ui("Concept links", "개념 링크"));
 		contentEl.createEl("p", {
 			cls: "lva-modal-help",
 			text: `Concept notes ${this.notePath.replace(/\.md$/i, "")} talks about. Mentions are linked where they first appear; related notes go under "## Related concepts". You see the whole change as a diff before anything is written.`,
@@ -112,8 +113,8 @@ export class ConceptModal extends Modal {
 				);
 		}
 		new Setting(contentEl)
-			.setName("Link properties")
-			.setDesc("Also record the concepts in this note's frontmatter, as Branching Table of Contents reads them. 'parent': this note sits under each concept, so a concept gathers its lectures from every course.")
+			.setName(ui("Link properties", "링크 속성"))
+			.setDesc(ui("Also record the concepts in this note's frontmatter, as Branching Table of Contents reads them. 'parent': this note sits under each concept, so a concept gathers its lectures from every course.", "개념을 이 노트의 YAML 속성에도 기록합니다. parent를 선택하면 개념 노트에 관련 강의를 모을 수 있습니다."))
 			.addDropdown((d) =>
 				d
 					.addOptions({ none: "Don't add properties", parent: "parent: the concepts", child: "child: the concepts" })
@@ -121,10 +122,10 @@ export class ConceptModal extends Modal {
 					.onChange((v) => (this.property = v as ConceptProperty)),
 			);
 		new Setting(contentEl)
-			.addButton((b) => b.setButtonText("Cancel").onClick(() => this.finish(false)))
+			.addButton((b) => b.setButtonText(ui("Cancel", "취소")).onClick(() => this.finish(false)))
 			.addButton((b) =>
 				b
-					.setButtonText("Show the diff")
+					.setButtonText(ui("Show the diff", "변경사항 보기"))
 					.setCta()
 					.onClick(() => this.finish(true)),
 			);
@@ -166,7 +167,7 @@ export class HistoryModal extends Modal {
 
 	onOpen(): void {
 		this.modalEl.addClass("lva-history-modal");
-		this.titleEl.setText("Change history");
+		this.titleEl.setText(ui("Change history", "변경 기록"));
 		this.render();
 		this.off = this.onChange(() => this.render());
 	}
@@ -176,7 +177,7 @@ export class HistoryModal extends Modal {
 		contentEl.empty();
 		const list = [...this.changes()].reverse();
 		if (list.length === 0) {
-			contentEl.createEl("p", { cls: "lva-modal-help", text: "No changes yet. Every diff you approve is listed here, newest first, with an Undo button." });
+			contentEl.createEl("p", { cls: "lva-modal-help", text: ui("No changes yet. Every diff you approve is listed here, newest first, with an Undo button.", "아직 변경 기록이 없습니다. 승인한 변경은 최신순으로 표시되며 실행 취소할 수 있습니다.") });
 			return;
 		}
 		contentEl.createEl("p", { cls: "lva-modal-help", text: `${list.length} approved change${list.length === 1 ? "" : "s"}, newest first (the last 300 are kept). Undo shows the reverse diff for approval and refuses when the note changed since where the change was.` });
@@ -189,11 +190,11 @@ export class HistoryModal extends Modal {
 			head.createSpan({ cls: "lva-history-src", text: c.undone ? `${src} · undone ${when(c.undone)}` : src });
 			const buttons = head.createDiv({ cls: "lva-history-buttons" });
 			if (c.tool !== "move_note" && /\.md$/i.test(c.path)) {
-				const openBtn = buttons.createEl("button", { text: "Open" });
+				const openBtn = buttons.createEl("button", { text: ui("Open", "열기") });
 				openBtn.addEventListener("click", () => this.openNote(c.path));
 			}
-			const diffBtn = buttons.createEl("button", { text: "Diff" });
-			const undoBtn = buttons.createEl("button", { text: c.undone ? "Undone" : "Undo", cls: c.undone ? "" : "mod-warning" });
+			const diffBtn = buttons.createEl("button", { text: ui("Diff", "변경사항 비교") });
+			const undoBtn = buttons.createEl("button", { text: c.undone ? ui("Undone", "실행 취소됨") : "Undo", cls: c.undone ? "" : "mod-warning" });
 			undoBtn.disabled = !!c.undone;
 			undoBtn.addEventListener("click", () => {
 				undoBtn.disabled = true;

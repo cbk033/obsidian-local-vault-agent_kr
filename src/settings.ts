@@ -13,6 +13,9 @@ export interface LocalVaultAgentSettings {
 	openaiKey: string;
 	/** Language answers are written in; "" = the language of the question. */
 	answerLanguage: string;
+	interfaceLanguage: "ko" | "en";
+	dnaEnginePath: string;
+	dnaModelPath: string;
 	/** The setup checklist has been shown once (first open of the chat). */
 	setupShown: boolean;
 	/** The one-question feedback survey: "ask" until answered or dismissed. */
@@ -82,19 +85,22 @@ export const SETTINGS_VERSION = 4;
 export const SAMPLING = { top_p: 0.9, top_k: 20, presence_penalty: 0.5 } as const;
 
 export const DEFAULT_SETTINGS: LocalVaultAgentSettings = {
-	provider: "ollama",
+	provider: "openai",
 	ollamaUrl: "http://localhost:11434",
-	openaiUrl: "http://localhost:1234/v1",
+	openaiUrl: "http://127.0.0.1:18081/v1",
 	openaiKey: "",
-	answerLanguage: "",
+	answerLanguage: "Korean",
+	interfaceLanguage: "ko",
+	dnaEnginePath: "",
+	dnaModelPath: "",
 	setupShown: false,
-	survey: "ask",
+	survey: "done",
 	answeredTurns: 0,
-	model: "qwen3.5:9b",
+	model: "DNA3.0-9B",
 	embeddingModel: "nomic-embed-text",
-	semanticSearch: true,
-	numCtx: 32768,
-	temperature: 0.6,
+	semanticSearch: false,
+	numCtx: 8192,
+	temperature: 0.2,
 	// Off by default since 0.5.0: on the benchmark vault qwen3.5:9b passed as many checks without
 	// thinking (92–94/96) as with it (90–91/96) in a third of the time and with fewer tool calls.
 	thinking: "off",
@@ -114,7 +120,7 @@ export const DEFAULT_SETTINGS: LocalVaultAgentSettings = {
 	dailyInboxHeading: "Capture",
 	dailyTopicsFolder: "Topics",
 	dailyMoveItems: true,
-	citations: "blocks",
+	citations: "headings",
 	visionModel: "",
 	conceptFolders: [...DEFAULT_CONCEPT_FOLDERS],
 	quizQuestions: 5,

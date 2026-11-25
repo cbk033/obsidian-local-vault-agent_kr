@@ -586,3 +586,16 @@
 .is-mobile .lva-setup-step {
 	flex-wrap: wrap;
 }
+
+
+/* Keep the path within its provider/model setting, on a full-width second line. */
+.lva-path-setting .setting-item-control {
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.lva-path-setting .setting-item-control .lva-path-input {
+	order: 10;
+	flex: 1 1 100%;
+	width: 100%;
+	min-width: 0;
+}

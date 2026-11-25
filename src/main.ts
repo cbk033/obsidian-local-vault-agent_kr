@@ -1,3 +1,5 @@
+import { DnaServer, isDnaEndpoint } from "./dna-server";
+import { ui } from "./i18n";
 import { FileSystemAdapter, MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, apiVersion, loadPdfJs, moment, normalizePath, requestUrl } from "obsidian";
 import { Agent, type AgentConfig } from "./agent";
 import { ApprovalModal } from "./approval-modal";
@@ -32,6 +34,7 @@ import { AgentView, VIEW_TYPE } from "./view";
 export default class LocalVaultAgentPlugin extends Plugin {
 	settings: LocalVaultAgentSettings = { ...DEFAULT_SETTINGS };
 	client!: OllamaClient;
+	readonly dnaServer = new DnaServer();
 	vault!: ObsidianVault;
 	index!: SemanticIndex;
 	gists!: GistCache;
@@ -56,9 +59,28 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	private statusListeners = new Set<(s: IndexStatus) => void>();
 	private gistListeners = new Set<(s: GistStatus) => void>();
 
+	get usesBundledDnaServer(): boolean {
+		return Platform.isDesktop && Platform.isWin && this.settings.provider === "openai"
+			&& isDnaEndpoint(this.settings.openaiUrl);
+	}
+
+	async ensureDnaServer(): Promise<string> {
+		const adapter = this.app.vault.adapter;
+		if (!(adapter instanceof FileSystemAdapter)) throw new Error("Vault filesystem is unavailable.");
+		const directory = this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+		return this.dnaServer.ensureStarted(() => this.client.listModels(), {
+			pluginDir: adapter.getFullPath(directory),
+			engine: this.settings.dnaEnginePath.trim(),
+			model: this.settings.dnaModelPath.trim(),
+			alias: this.settings.model,
+			context: Math.max(16384, this.settings.numCtx),
+		});
+	}
+
 	async onload(): Promise<void> {
+		this.register(() => { this.dnaServer.stop(); });
 		await this.loadSettings();
-		setLocale((moment as unknown as { locale(): string }).locale());
+		setLocale(this.settings.interfaceLanguage);
 		log.info(`Local Vault Agent ${this.manifest.version} loaded (Obsidian ${apiVersion}, ${this.settings.provider})`);
 
 		this.client = new OllamaClient(
@@ -360,7 +382,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 			id: "rebuild-gists",
 			name: t("cmd.gists"),
 			callback: async () => {
-				new Notice("Regenerating gists for every note in the background…");
+				new Notice(ui("Regenerating gists for every note in the background…", "백그라운드에서 모든 노트의 한 줄 요약을 다시 만드는 중…"));
 				await this.gists.syncAll(true);
 				const s = this.gists.status();
 				new Notice(s.lastError ? `Gist error: ${s.lastError}` : `Gists ready for ${s.done} notes.`);
@@ -370,7 +392,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 			id: "rebuild-index",
 			name: t("cmd.index"),
 			callback: async () => {
-				new Notice("Rebuilding the semantic index…");
+				new Notice(ui("Rebuilding the semantic index…", "의미 검색 색인을 다시 만드는 중…"));
 				await this.index.syncAll(true);
 				const s = this.index.status();
 				new Notice(s.lastError ? `Index error: ${s.lastError}` : `Indexed ${s.indexedFiles} notes.`);
@@ -597,7 +619,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	async reformatCurrentNote(view?: AgentView | null): Promise<void> {
 		const file = this.activeNote();
 		if (!file) {
-			new Notice("Open a markdown note first.");
+			new Notice(ui("Open a markdown note first.", "먼저 Markdown 노트를 여세요."));
 			return;
 		}
 		const content = await this.app.vault.cachedRead(file);
@@ -624,7 +646,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 		const selection = editorView?.editor.getSelection() ?? "";
 		const file = editorView?.file;
 		if (!file || !selection.trim()) {
-			new Notice("Select some text in a note first.");
+			new Notice(ui("Select some text in a note first.", "노트에서 텍스트를 먼저 선택하세요."));
 			return;
 		}
 		const modal = new InstructionModal(this.app, selection);
@@ -717,7 +739,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	async summarizeCurrentNote(view?: AgentView | null): Promise<void> {
 		const file = this.activeNote();
 		if (!file) {
-			new Notice("Open a markdown note first.");
+			new Notice(ui("Open a markdown note first.", "먼저 Markdown 노트를 여세요."));
 			return;
 		}
 		const target = view ?? (await this.activateView());
@@ -727,7 +749,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	async undoLast(): Promise<void> {
 		const latest = this.undo.latest();
 		if (!latest) {
-			new Notice("Nothing to undo.");
+			new Notice(ui("Nothing to undo.", "실행 취소할 변경이 없습니다."));
 			return;
 		}
 		await this.revert(latest);
@@ -736,7 +758,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	async undoLastTurn(): Promise<void> {
 		const latest = this.undo.latest();
 		if (!latest) {
-			new Notice("Nothing to undo.");
+			new Notice(ui("Nothing to undo.", "실행 취소할 변경이 없습니다."));
 			return;
 		}
 		await this.revertTurn(latest.turn, latest.chat);
@@ -784,7 +806,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	async revertTurn(turn: number, chat?: string): Promise<void> {
 		const changes = this.undo.forTurn(turn, chat);
 		if (changes.length === 0) {
-			new Notice("Nothing to undo.");
+			new Notice(ui("Nothing to undo.", "실행 취소할 변경이 없습니다."));
 			return;
 		}
 		let done = 0;
@@ -884,6 +906,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 		const deviceMemory = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
 		new SetupModal(this.app, {
 			initialTier: guessTier(deviceMemory),
+			configuredModel: this.settings.provider === "openai" ? this.settings.model : undefined,
 			evaluate: async (tier: MachineTier) => {
 				let models = null;
 				let serverError: string | undefined;
@@ -1047,7 +1070,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	async suggestConceptLinks(): Promise<void> {
 		const file = this.activeNote();
 		if (!file) {
-			new Notice("Open a note first.");
+			new Notice(ui("Open a note first.", "먼저 노트를 여세요."));
 			return;
 		}
 		const content = await this.app.vault.read(file);
@@ -1086,7 +1109,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 		const current = await this.app.vault.read(file);
 		const after = applyConceptLinks(current, picked.chosen, picked.property);
 		if (after === current) {
-			new Notice("Nothing to change.");
+			new Notice(ui("Nothing to change.", "변경할 내용이 없습니다."));
 			return;
 		}
 		const n = picked.chosen.length;
@@ -1109,7 +1132,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	 */
 	async runJob(job: JobId, manual: boolean): Promise<void> {
 		if (this.jobRunning) {
-			if (manual) new Notice("A scheduled job is already running.");
+			if (manual) new Notice(ui("A scheduled job is already running.", "예약 작업이 이미 실행 중입니다."));
 			return;
 		}
 		this.jobRunning = true;
@@ -1211,7 +1234,7 @@ export default class LocalVaultAgentPlugin extends Plugin {
 	/** Walks the queued changes as diffs: approve writes, reject drops, a change that no longer fits is dropped with a notice. */
 	async reviewPending(): Promise<void> {
 		if (this.pending.size === 0) {
-			new Notice("No scheduled changes waiting.");
+			new Notice(ui("No scheduled changes waiting.", "검토 대기 중인 예약 변경이 없습니다."));
 			return;
 		}
 		let approveAll = false;

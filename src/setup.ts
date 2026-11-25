@@ -1,3 +1,4 @@
+import { ui } from "./i18n";
 import { sameModel, type ModelInfo } from "./ollama";
 
 /**
@@ -60,43 +61,43 @@ export function evaluateSetup(i: SetupInput): SetupStep[] {
 	const steps: SetupStep[] = [];
 	const pullable = i.provider === "ollama";
 	if (!i.models) {
-		steps.push({ id: "server", state: "missing", detail: i.provider === "ollama" ? `Ollama is not reachable${i.serverError ? ` (${i.serverError})` : ""}. Install it from ollama.com and start it, or fix the URL in settings.` : `The server is not reachable${i.serverError ? ` (${i.serverError})` : ""}. Start it (LM Studio: enable the local server) or fix the URL in settings.`, fix: { kind: "settings" } });
-		steps.push({ id: "chat", state: "unknown", detail: "Waiting for the server." });
-		steps.push({ id: "embed", state: "unknown", detail: "Waiting for the server." });
-		steps.push({ id: "index", state: "unknown", detail: "Waiting for the server." });
+		steps.push({ id: "server", state: "missing", detail: ui(i.provider === "ollama" ? `Ollama is not reachable${i.serverError ? ` (${i.serverError})` : ""}. Install it from ollama.com and start it, or fix the URL in settings.` : `The server is not reachable${i.serverError ? ` (${i.serverError})` : ""}. Start it (LM Studio: enable the local server) or fix the URL in settings.`, i.provider === "ollama" ? "Ollama에 연결할 수 없습니다. 서버를 시작하거나 설정에서 주소를 확인하세요." : "모델 서버에 연결할 수 없습니다. DNA 서버 실행 스크립트를 실행하고 서버 주소를 확인하세요."), fix: { kind: "settings" } });
+		steps.push({ id: "chat", state: "unknown", detail: ui("Waiting for the server.", "서버 연결을 기다리는 중입니다.") });
+		steps.push({ id: "embed", state: "unknown", detail: ui("Waiting for the server.", "서버 연결을 기다리는 중입니다.") });
+		steps.push({ id: "index", state: "unknown", detail: ui("Waiting for the server.", "서버 연결을 기다리는 중입니다.") });
 		return steps;
 	}
-	steps.push({ id: "server", state: "ok", detail: `${i.models.length} model${i.models.length === 1 ? "" : "s"} available.` });
+	steps.push({ id: "server", state: "ok", detail: ui(`${i.models.length} model${i.models.length === 1 ? "" : "s"} available.`, `사용 가능한 모델 ${i.models.length}개`) });
 
 	const chat = i.models.find((m) => sameModel(m.name, i.chatModel));
 	const recommended = RECOMMENDED[i.tier];
 	const toolModels = i.models.filter(canCallTools);
-	if (chat && canCallTools(chat)) steps.push({ id: "chat", state: "ok", detail: `${chat.name} is installed and can call tools.` });
+	if (chat && canCallTools(chat)) steps.push({ id: "chat", state: "ok", detail: ui(`${chat.name} is installed and can call tools.`, `${chat.name} 사용 가능 · 도구 호출 지원`) });
 	else if (chat) {
 		const alt = toolModels[0];
-		steps.push({ id: "chat", state: "missing", detail: `${chat.name} cannot call tools, which the agent needs.`, fix: alt ? { kind: "use", model: alt.name, role: "chat" } : pullable ? { kind: "pull", model: recommended, role: "chat" } : { kind: "settings" } });
+		steps.push({ id: "chat", state: "missing", detail: ui(`${chat.name} cannot call tools, which the agent needs.`, `${chat.name}은 도구 호출을 지원하지 않습니다.`), fix: alt ? { kind: "use", model: alt.name, role: "chat" } : pullable ? { kind: "pull", model: recommended, role: "chat" } : { kind: "settings" } });
 	} else {
 		const installedRec = i.models.find((m) => sameModel(m.name, recommended));
 		steps.push({
 			id: "chat",
 			state: "missing",
-			detail: `${i.chatModel} is not installed.`,
+			detail: ui(`${i.chatModel} is not installed.`, `서버에 ${i.chatModel} 모델이 없습니다.`),
 			fix: installedRec ? { kind: "use", model: installedRec.name, role: "chat" } : pullable ? { kind: "pull", model: recommended, role: "chat" } : toolModels[0] ? { kind: "use", model: toolModels[0].name, role: "chat" } : { kind: "settings" },
 		});
 	}
 
-	if (!i.semanticSearch) steps.push({ id: "embed", state: "warn", detail: "Semantic search is off; keyword search only.", fix: { kind: "settings" } });
-	else if (i.models.some((m) => sameModel(m.name, i.embeddingModel))) steps.push({ id: "embed", state: "ok", detail: `${i.embeddingModel} is installed.` });
+	if (!i.semanticSearch) steps.push({ id: "embed", state: "warn", detail: ui("Semantic search is off; keyword search only.", "의미 검색이 꺼져 있어 키워드로 검색합니다."), fix: { kind: "settings" } });
+	else if (i.models.some((m) => sameModel(m.name, i.embeddingModel))) steps.push({ id: "embed", state: "ok", detail: ui(`${i.embeddingModel} is installed.`, `${i.embeddingModel} 사용 가능`) });
 	else {
 		const other = i.models.find(isEmbedding);
-		steps.push({ id: "embed", state: "missing", detail: `${i.embeddingModel} is not installed; search falls back to keywords.`, fix: pullable ? { kind: "pull", model: i.embeddingModel || RECOMMENDED_EMBED, role: "embed" } : other ? { kind: "use", model: other.name, role: "embed" } : { kind: "settings" } });
+		steps.push({ id: "embed", state: "missing", detail: ui(`${i.embeddingModel} is not installed; search falls back to keywords.`, `${i.embeddingModel}이 없어 키워드 검색을 사용합니다.`), fix: pullable ? { kind: "pull", model: i.embeddingModel || RECOMMENDED_EMBED, role: "embed" } : other ? { kind: "use", model: other.name, role: "embed" } : { kind: "settings" } });
 	}
 
-	if (!i.semanticSearch) steps.push({ id: "index", state: "warn", detail: "No index without semantic search." });
-	else if (i.index.lastError) steps.push({ id: "index", state: "missing", detail: `Index error: ${i.index.lastError}`, fix: { kind: "index" } });
+	if (!i.semanticSearch) steps.push({ id: "index", state: "warn", detail: ui("No index without semantic search.", "의미 검색이 꺼져 있어 색인을 만들지 않습니다.") });
+	else if (i.index.lastError) steps.push({ id: "index", state: "missing", detail: ui(`Index error: ${i.index.lastError}`, `색인 오류 · ${i.index.lastError}`), fix: { kind: "index" } });
 	else if (i.index.building) steps.push({ id: "index", state: "warn", detail: `Indexing… ${i.index.indexedFiles} of ${i.index.indexedFiles + i.index.pending} notes.` });
-	else if (i.index.indexedFiles === 0 && i.notes > 0) steps.push({ id: "index", state: "missing", detail: `None of your ${i.notes} notes are indexed yet.`, fix: { kind: "index" } });
-	else steps.push({ id: "index", state: "ok", detail: `${i.index.indexedFiles} notes indexed.` });
+	else if (i.index.indexedFiles === 0 && i.notes > 0) steps.push({ id: "index", state: "missing", detail: ui(`None of your ${i.notes} notes are indexed yet.`, `노트 ${i.notes}개의 색인을 아직 만들지 않았습니다.`), fix: { kind: "index" } });
+	else steps.push({ id: "index", state: "ok", detail: ui(`${i.index.indexedFiles} notes indexed.`, `노트 ${i.index.indexedFiles}개 색인 완료`) });
 	return steps;
 }
 

@@ -114,6 +114,7 @@ export interface SetupActions {
 	openSettings(): void;
 	trySample(): Promise<void>;
 	initialTier: MachineTier;
+	configuredModel?: string;
 }
 
 /** The setup checklist: live status of each step with one fix button, and the model recommendation. */
@@ -135,7 +136,9 @@ export class SetupModal extends Modal {
 		modalEl.addClass("lva-options-modal", "lva-setup-modal");
 		titleEl.setText(t("setup.title"));
 		contentEl.createEl("p", { cls: "lva-modal-help", text: t("setup.help") });
-		new Setting(contentEl)
+		if (this.actions.configuredModel) {
+			new Setting(contentEl).setName(t("set.model.name")).setDesc(this.actions.configuredModel);
+		} else new Setting(contentEl)
 			.setName(t("setup.recommend"))
 			.addDropdown((d) =>
 				d
